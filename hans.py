@@ -32,6 +32,15 @@ df_combined['Main_Country'] = df_combined['Main_Country'].replace({
     'UK': 'United Kingdom', 
     'Britain': 'United Kingdom'
 })
+ # Carga y limpieza (igual que en tus códigos anteriores)
+
+df_combined['Year'] = pd.to_numeric(df_combined['Year'], errors='coerce')
+df_combined['Final Year'] = pd.to_numeric(df_combined['Final Year'], errors='coerce')
+df_combined = df_combined.dropna(subset=['Year']).copy()
+df_combined['Year'] = df_combined['Year'].astype(int)
+df_combined['Decade'] = (df_combined['Year'] // 10) * 10
+df_combined['Duration'] = df_combined['Final Year'] - df_combined['Year']
+
 
 # Filtrar valores nulos de texto
 df_combined = df_combined[df_combined['Main_Country'] != 'nan']
@@ -41,28 +50,33 @@ sns.set_theme(style="whitegrid")
 colores = sns.color_palette("husl", 10)
 
 # ==========================================
-# GRÁFICO 1: MAPA DE CALOR (Décadas vs Top 10 Países)
+# GRÁFICO 1: GRÁFICO DE MANCUERNAS
 # ==========================================
-# Crear columna de década
-df_combined['Decade'] = (df_combined['Year'] // 10) * 10
-top_10_countries = df_combined['Main_Country'].value_counts().head(10).index
-df_heatmap = df_combined[df_combined['Main_Country'].isin(top_10_countries)]
+# Filtrar las 15 más longevas y ordenarlas por año de estreno
+long_df = df_combined.dropna(subset=['Title', 'Final Year', 'Year']).copy()
+top_15_long = long_df.sort_values(by='Duration', ascending=False).head(15)
+top_15_long = top_15_long.sort_values(by='Year', ascending=False)
 
-# Crear matriz pivot
-heatmap_data = df_heatmap.pivot_table(index='Main_Country', columns='Decade', aggfunc='size', fill_value=0)
-heatmap_data.columns = [f"{int(c)}s" for c in heatmap_data.columns] # Formato '1980s'
+fig10, ax10 = plt.subplots(figsize=(12, 8))
+# 1. Dibujar las líneas de duración (Cuerpo de la mancuerna)
+ax10.hlines(y=top_15_long['Title'], xmin=top_15_long['Year'], xmax=top_15_long['Final Year'], color='grey', alpha=0.5, linewidth=4)
+# 2. Dibujar Año de Inicio
+ax10.scatter(top_15_long['Year'], top_15_long['Title'], color='skyblue', s=100, label='Año de Estreno', zorder=3)
+# 3. Dibujar Año de Finalización
+ax10.scatter(top_15_long['Final Year'], top_15_long['Title'], color='red', s=100, label='Año Final', zorder=3)
 
-fig3, ax3 = plt.subplots(figsize=(12, 6))
-sns.heatmap(heatmap_data, cmap='YlGnBu', annot=True, fmt='d', linewidths=.5, ax=ax3, cbar_kws={'label': 'Nº de Estrenos'})
+# 4. Añadir la duración encima de cada mancuerna
+for _, row in top_15_long.iterrows():
+    mid_x = row['Year'] + (row['Final Year'] - row['Year']) / 2
+    ax10.text(mid_x, row['Title'], str(int(row['Duration'])) + " años",
+              ha='center', va='bottom', fontsize=9, fontweight='bold', color='black')
 
-ax3.set_title('Concentración de Estrenos por País y Década', fontsize=16, fontweight='bold', pad=15)
-ax3.set_xlabel('Década', fontsize=12)
-ax3.set_ylabel('País', fontsize=12)
-plt.yticks(rotation=0)
-
+ax10.set_title('Línea de Vida de las 15 Series más Longevas', fontsize=15, fontweight='bold')
+ax10.set_xlabel('Línea de Tiempo (Años)')
+ax10.legend()
+ax10.grid(True, axis='x', linestyle='--', alpha=0.7)
 plt.tight_layout()
-fig3.savefig('mapa_calor.png', dpi=300)
-plt.close(fig3)
+plt.savefig('mancuernas.png', dpi=300)
 
 # ==========================================
 # GRÁFICO 2: BUBBLE CHART (Canales de TV)
@@ -83,5 +97,5 @@ plt.savefig('burbuja.png')
 
 print("¡Proceso terminado con éxito!")
 print("Se han generado 2 gráficos, separados y adaptados a tus datos de series animadas:")
-print("3. 'mapa_calor.png'")
-print("4. 'burbuja.png'")
+print("1. 'mancuernas.png'")
+print("2. 'burbuja.png'")
