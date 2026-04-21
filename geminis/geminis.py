@@ -53,7 +53,7 @@ if 'Unknown' in top_countries:
     top_countries.remove('Unknown')
     top_countries.append(df_expanded['Country'].value_counts().index[8])
 
-# dksajkghs
+# Si 'US' se coló en el top, que si lo hizo, lo sacamos y agregamos el siguiente en la lista
 if 'US' in top_countries:
     top_countries.remove('US')
     top_countries.append(df_expanded['Country'].value_counts().index[8])
