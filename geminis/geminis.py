@@ -32,6 +32,11 @@ df_combined['Country'] = df_combined['Country'].fillna('Unknown').astype(str)
 df_combined['Country'] = df_combined['Country'].replace({
     'US': 'United States', 
     'USA': 'United States', 
+    ' US' : 'United States',
+    'US ' : 'United States',
+    'USA ' : 'United States',
+    ' USA' : 'United States',
+    'U S' : 'United States',
     'UK': 'United Kingdom'
 })
 
@@ -46,6 +51,11 @@ top_countries = df_expanded['Country'].value_counts().head(8).index.tolist()
 # Si 'Unknown' se coló en el top, lo sacamos y agregamos el siguiente en la lista
 if 'Unknown' in top_countries:
     top_countries.remove('Unknown')
+    top_countries.append(df_expanded['Country'].value_counts().index[8])
+
+# dksajkghs
+if 'US' in top_countries:
+    top_countries.remove('US')
     top_countries.append(df_expanded['Country'].value_counts().index[8])
 
 # Filtrar el DataFrame final solo con esos países top
