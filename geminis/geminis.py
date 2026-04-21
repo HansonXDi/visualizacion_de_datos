@@ -1,106 +1,110 @@
 import pandas as pd
 import matplotlib.pyplot as plt
+import seaborn as sns
 import numpy as np
 
-# =================================================================
-# 1. CARGA Y PREPARACIÓN DE DATOS
-# =================================================================
+# =====================================================================
+# 1. CARGA Y LIMPIEZA DE DATOS
+# =====================================================================
 
-# Cargamos los tres archivos
+# Cargar archivos y unificar la columna del año de estreno
 try:
-    df1 = pd.read_csv('1948 - 1986.csv')
-    df2 = pd.read_csv('1987 - 2022.csv')
-    df3 = pd.read_csv('2023.csv')
+    df1 = pd.read_csv('1948 - 1986.csv').rename(columns={'Premiere Year': 'Year'})
+    df2 = pd.read_csv('1987 - 2022.csv').rename(columns={'Premiere Year': 'Year'})
+    df3 = pd.read_csv('2023.csv').rename(columns={'Original channel': 'Original Channel'})
     
-    # Estandarizamos el nombre de la columna del año de estreno
-    df1 = df1.rename(columns={'Premiere Year': 'Year'})
-    df2 = df2.rename(columns={'Premiere Year': 'Year'})
-    # El archivo 2023 ya usa 'Year'
-    
-    # Combinamos todos los datasets en uno solo
-    df_full = pd.concat([df1, df2, df3], ignore_index=True, sort=False)
-except FileNotFoundError:
-    print("Error: Asegúrate de tener los archivos CSV en la misma carpeta que este script.")
+    # Concatenar todos los datos en un solo DataFrame
+    df_combined = pd.concat([df1, df2, df3], ignore_index=True)
+except FileNotFoundError as e:
+    print(f"Error al cargar archivos: {e}. Asegúrate de que estén en la misma carpeta.")
     exit()
 
-# Limpieza rápida: Estandarizar nombres de países (ej: US y United States)
-def limpiar_pais(pais):
-    if pd.isna(pais): return "Desconocido"
-    # Tomamos solo el primer país si es una coproducción y limpiamos espacios
-    p = str(pais).split(',')[0].strip().replace('"', '')
-    mapping = {
-        'US': 'USA', 'United States': 'USA', 'United Kingdom': 'UK',
-        'Britain': 'UK', 'Soviet Union': 'Russia'
-    }
-    return mapping.get(p, p)
+# Limpieza básica de la columna de Años
+df_combined['Year'] = pd.to_numeric(df_combined['Year'], errors='coerce')
+df_combined = df_combined.dropna(subset=['Year'])
+df_combined['Year'] = df_combined['Year'].astype(int)
 
-df_full['Country_Clean'] = df_full['Country'].apply(limpiar_pais)
+# Limpieza de Países
+# Rellenar nulos y convertir a texto
+df_combined['Country'] = df_combined['Country'].fillna('Unknown').astype(str)
 
-# Obtenemos el conteo de series por país y seleccionamos el Top 20
-data = df_full['Country_Clean'].value_counts().head(20).reset_index()
-data.columns = ['Country', 'Count']
-# Ordenamos de menor a mayor para que el espiral radial se vea armónico
-data = data.sort_values(by='Count')
+# Unificar nomenclaturas comunes para evitar duplicados
+df_combined['Country'] = df_combined['Country'].replace({
+    'US': 'United States', 
+    'USA': 'United States', 
+    'UK': 'United Kingdom'
+})
 
-# =================================================================
-# 2. CONFIGURACIÓN DEL GRÁFICO RADIAL (NOVEDOSO)
-# =================================================================
+# Muchas series son coproducciones (ej. "United States, Canada").
+# Aquí separamos esas listas y creamos una fila por cada país participante.
+df_expanded = df_combined.assign(Country=df_combined['Country'].str.split(',')).explode('Country')
+df_expanded['Country'] = df_expanded['Country'].str.strip() # Quitar espacios en blanco
 
-# Parámetros básicos
-labels = data['Country']
-values = data['Count']
-n_obs = len(data)
+# Obtener los 8 países con mayor cantidad de series producidas
+top_countries = df_expanded['Country'].value_counts().head(8).index.tolist()
 
-# Calculamos los ángulos para cada barra en el círculo
-# Dejamos un espacio (gap) al final para que no se cierre el círculo completo
-angles = np.linspace(0, 2 * np.pi, n_obs, endpoint=False)
+# Si 'Unknown' se coló en el top, lo sacamos y agregamos el siguiente en la lista
+if 'Unknown' in top_countries:
+    top_countries.remove('Unknown')
+    top_countries.append(df_expanded['Country'].value_counts().index[8])
 
-# Configuración de la figura con proyección polar
-plt.figure(figsize=(12, 12), facecolor='#f9f9f9')
-ax = plt.subplot(111, polar=True)
-ax.set_theta_offset(np.pi / 2) # Empezar desde arriba
-ax.set_theta_direction(-1)     # Dirección de las agujas del reloj
-ax.set_facecolor('#f9f9f9')
+# Filtrar el DataFrame final solo con esos países top
+df_top_countries = df_expanded[df_expanded['Country'].isin(top_countries)]
 
-# Quitar cuadrículas y ejes estándar para un look limpio
-ax.set_yticklabels([])
-ax.set_xticklabels([])
-ax.spines['polar'].set_visible(False)
+# =====================================================================
+# 2. CREACIÓN DEL GRÁFICO NOVEDOSO: RIDGELINE PLOT
+# =====================================================================
 
-# Colores: un degradado basado en la cantidad de series
-colors = plt.cm.viridis(values / max(values))
+# Configurar el estilo visual base de Seaborn (fondo transparente para el efecto)
+sns.set_theme(style="white", rc={"axes.facecolor": (0, 0, 0, 0)})
 
-# Dibujar las barras radiales
-bars = ax.bar(angles, values, color=colors, alpha=0.9, width=0.2, edgecolor='white', linewidth=1)
+# Crear una paleta de colores vibrante y distinta para cada país
+paleta_colores = sns.color_palette("husl", len(top_countries))
 
-# =================================================================
-# 3. AÑADIR ETIQUETAS Y ESTILO
-# =================================================================
+# Inicializar un FacetGrid. Esto crea una fila de gráfico por cada país.
+# aspect ajusta el ancho y height la altura de cada "cresta"
+g = sns.FacetGrid(df_top_countries, row="Country", hue="Country", 
+                  aspect=10, height=1.2, palette=paleta_colores)
 
-# Añadir los nombres de los países y los valores
-for angle, value, label in zip(angles, values, labels):
-    # Rotación del texto para que sea legible
-    rotation = np.rad2deg(angle)
-    if angle >= np.pi:
-        alignment = "right"
-        rotation += 180
-    else:
-        alignment = "left"
-    
-    # Colocar el texto justo al final de cada barra
-    ax.text(
-        x=angle, y=value + 10, s=f"{label} ({value})", 
-        ha=alignment, va='center', rotation=rotation, 
-        rotation_mode="anchor", fontsize=10, fontweight='bold', color='#333333'
-    )
+# 2.1 - Dibujar el área rellena de color de la densidad de años
+g.map(sns.kdeplot, "Year", bw_adjust=.5, clip_on=False, fill=True, alpha=0.8, linewidth=1.5)
 
-# Título central estilizado
-plt.title("Potencias Mundiales de la Animación\n", size=22, fontweight='bold', color='#2c3e50', pad=30)
-plt.suptitle("Total de series producidas por país (1948 - 2023)", y=0.88, fontsize=12, color='#7f8c8d')
+# 2.2 - Dibujar un borde blanco grueso y luego uno negro delgado encima 
+# para dar el efecto de sombra/relieve separando las "montañas"
+g.map(sns.kdeplot, "Year", clip_on=False, color="white", lw=2, bw_adjust=.5)
+g.map(sns.kdeplot, "Year", clip_on=False, color="black", lw=1, bw_adjust=.5)
 
-# Nota al pie
-plt.figtext(0.5, 0.05, "Fuente: Análisis histórico de series de animación", ha="center", fontsize=9, color='gray')
+# 2.3 - Añadir una línea horizontal negra sólida que sirva de "suelo" a cada país
+g.map(plt.axhline, y=0, lw=2, clip_on=False, color='black')
 
-# Guardar el resultado
-plt.savefig('radial_animation_chart.png', dpi=300, bbox_inches='tight')
-print("¡Gráfico radial generado con éxito como 'radial_animation_chart.png'!")
+# Función auxiliar para escribir el nombre del país encima de su curva respectiva
+def label_country(x, color, label):
+    ax = plt.gca() # Obtener el eje actual
+    ax.text(0, .2, label, fontweight="bold", color=color,
+            ha="left", va="center", transform=ax.transAxes, fontsize=12)
+
+# Mapear la función a la cuadrícula
+g.map(label_country, "Year")
+
+# Ajustar el espacio vertical a un valor negativo para que las curvas se solapen (Efecto 3D)
+g.figure.subplots_adjust(hspace=-0.4)
+
+# Limpieza estética: quitar títulos por defecto de Seaborn, quitar marcas del eje Y y bordes
+g.set_titles("")
+g.set(yticks=[], ylabel="")
+g.despine(bottom=True, left=True)
+
+# Título general de la visualización
+plt.suptitle('Evolución Histórica de la Producción de Series Animadas', 
+             fontsize=18, fontweight='bold', y=0.98)
+
+# Configurar el eje X con los años
+plt.xlabel("Año de Estreno", fontsize=14, fontweight='bold', labelpad=20)
+
+# =====================================================================
+# 3. GUARDAR Y RENDERIZAR
+# =====================================================================
+
+# Guardar la imagen en alta resolución
+plt.savefig('ridgeline_paises.png', dpi=300, bbox_inches='tight')
+print("¡El gráfico ha sido generado y guardado exitosamente como 'ridgeline_paises.png'!")
